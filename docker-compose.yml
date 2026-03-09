@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  api:
+    image: node:18-alpine
+    command: npm run start:prod
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://user:password@timescaledb:5432/farmdb
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_BUCKET=${S3_BUCKET}
+      - SENTRY_DSN=${SENTRY_DSN}
+    depends_on:
+      - timescaledb
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - backend
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=farmdb
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d farmdb"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - backend
+
+  sensor-processor:
+    image: node:18-alpine
+    command: npm run start:processor
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://user:password@timescaledb:5432/farmdb
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - timescaledb
+      - redis
+    networks:
+      - backend
+
+  analytics-processor:
+    image: node:18-alpine
+    command: npm run start:analytics
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://user:password@timescaledb:5432/farmdb
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - timescaledb
+      - redis
+    networks:
+      - backend
+
+volumes:
+  timescale_data:
+  redis_data:
+
+networks:
+  backend:
+    driver: bridge
