@@ -1,0 +1,43 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+model Location {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  latitude    Decimal      @db.Decimal(10, 8)
+  longitude   Decimal      @db.Decimal(11, 8)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(6)
+  soilMetrics SoilMetric[]
+
+  @@index([latitude, longitude])
+}
+
+model SoilMetric {
+  id          String    @id @default(uuid()) @db.Uuid
+  timestamp   DateTime  @db.Timestamptz(6)
+  moisture    Decimal   @db.Decimal(5, 2)
+  pH          Decimal   @db.Decimal(4, 2)
+  temperature Decimal   @db.Decimal(5, 2)
+  locationId  String    @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  location    Location  @relation(fields: [locationId], references: [id])
+
+  @@index([timestamp])
+  @@index([locationId, timestamp])
+}
+
+// Enable TimescaleDB extension
+extension timescaledb schema @postgres
+
+// Create hypertable for SoilMetric
+/// Manually create hypertable after migration:
+/// SELECT create_hypertable('"SoilMetric"', 'timestamp');
